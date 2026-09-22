@@ -1,0 +1,14 @@
+services:
+  app-021:
+    build: .
+    image: app-021-codegen-03-classroom-seating-rotation
+    container_name: app-021-codegen-03
+    ports:
+      - "8121:80"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3

@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.env
+.env.*
+*.log
+coverage/
+.DS_Store
+.vscode/
+.idea/
+
+# 未成年人信息绝不入库：真实学生名单与座位表导出不提交
+classes/
+exports/
+*.xlsx
