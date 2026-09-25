@@ -190,6 +190,16 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--brand-weak)
 .stat-card dd { margin: 0; font-weight: 700; display: inline-flex; align-items: center; gap: 4px; }
 .gen-panel { padding-bottom: 10px; }
 
+/* ---------- 多种子优选 ---------- */
+.progress-wrap { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 240px; }
+.progress { flex: 1; height: 8px; border-radius: 999px; background: #eef1f6; overflow: hidden; min-width: 120px; }
+.progress-fill { height: 100%; background: var(--brand); border-radius: 999px; transition: width 0.2s; }
+.row-best { background: #f0fdf4; }
+.row-best:hover { background: #e6f8ee !important; }
+.cell-best { color: var(--good); font-weight: 700; }
+.badge-best { background: var(--good-weak); color: var(--good); }
+.seed-best-note { border-left: 3px solid var(--good); padding-left: 10px; margin-top: 8px; }
+
 .swap-preview {
   position: fixed; left: 50%; transform: translateX(-50%); bottom: 18px; z-index: 50;
   display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
