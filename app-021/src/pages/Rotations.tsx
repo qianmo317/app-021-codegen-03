@@ -4,6 +4,7 @@ import { useStore } from '../store'
 import type { SwapPreview } from '../lib/fairness'
 import { computeFairness, previewSwap, weekStats } from '../lib/fairness'
 import { SeatGrid } from '../components/SeatGrid'
+import { SweepPanel } from '../components/SweepPanel'
 import { randomSeed } from '../lib/engine'
 import { downloadCSV, weeksCSV } from '../lib/csv'
 import { AlertTriangle, CheckCircle2, Dices, Download, Printer, RotateCcw, Undo2, Wand2 } from 'lucide-react'
@@ -162,6 +163,17 @@ export function Rotations({ classId }: { classId: string }) {
           </p>
         )}
       </section>
+
+      {/* 多种子批量比选 */}
+      <SweepPanel
+        cls={cls}
+        disabled={busy}
+        onAdopted={() => {
+          setSeedDraft(null)
+          setWeeksDraft(null)
+          flash('已采用该套种子方案为当前结果', 'ok')
+        }}
+      />
 
       {/* 周次选择 */}
       {hasPlan && (

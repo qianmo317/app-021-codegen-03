@@ -1,7 +1,19 @@
-import type { ClassEntity, Seat, Student, StudentId } from '../types'
+import type { Assignment, ClassEntity, Seat, Student, StudentId } from '../types'
 import { buildSeatIndex, middleColSet, positionScore } from './layout'
 
 // ================= 公平性报告（§4.4 / §10） =================
+
+// 多种子比选时用于排序的四项硬指标 + 身高序（同一套配置跨种子可比）
+export interface PlanMetrics {
+  weeks: number
+  hardViolations: number // 硬约束违反总数（视力/听力/行动不便/固定座位/必须分开）
+  frontRowsRange: number // 每人「前 N 排」次数极差（越小越公平）
+  variance: number // 累计位置分 Σ偏差²（越小越公平）
+  std: number
+  deskOverLimit: number // 同桌 > 2 次的对数
+  deskmateOverLimit: { a: string; b: string; count: number }[]
+  heightViolations: number
+}
 
 export interface DeskmateStat {
   studentId: StudentId
@@ -129,7 +141,119 @@ export function weekStats(cls: ClassEntity, map: Record<string, string>, exclude
   return { fairness, repeats }
 }
 
+// 全班汇总指标（比选多套种子方案时使用；逐周单次遍历，避免反复 buildSeatIndex）
+export function planMetrics(cls: ClassEntity, assignments: Assignment[]): PlanMetrics {
+  const idx = buildSeatIndex(cls.seats, cls.layout)
+  const cols = cls.layout.cols
+  const frontRows = Math.max(1, Math.min(cls.constraints.frontRows, cls.layout.rows))
+  const hearingRows = Math.max(1, Math.ceil(cls.layout.rows / 2))
+  const mc = middleColSet(cls.layout)
+  const n = cls.students.length
+  const stIdx = new Map(cls.students.map((s, i) => [s.id, i]))
+  const frontCount = new Float64Array(n)
+  const cumScore = new Float64Array(n)
+  const deskPairCount = new Map<number, number>()
+  let hard = 0
+  let heightViolations = 0
+  const apartIdx = new Set<number>()
+  cls.students.forEach((s, i) => {
+    for (const otherId of s.mustApartFrom) {
+      const j = stIdx.get(otherId)
+      if (j === undefined || j === i) continue
+      apartIdx.add(i < j ? i * 4096 + j : j * 4096 + i)
+    }
+  })
+
+  const pairKey = (a: number, b: number) => (a < b ? a * 4096 + b : b * 4096 + a)
+  const sorted = [...assignments].sort((a, b) => a.week - b.week)
+  for (const asg of sorted) {
+    const occ = new Int32Array(idx.seats.length).fill(-1) // seatIdx → studentIdx
+    for (const [seatId, studentId] of Object.entries(asg.map)) {
+      const seat = idx.byId.get(seatId)
+      const st = stIdx.get(studentId)
+      if (!seat || st === undefined) continue
+      const si = seat.row * cols + seat.col
+      occ[si] = st
+      const student = cls.students[st]
+      cumScore[st] += idx.posScore[si]
+      if (seat.row < frontRows) frontCount[st] += 1
+      if (student.vision === 'front_required' && seat.row >= frontRows) hard++
+      if (student.vision === 'middle_required' && !mc.has(seat.col)) hard++
+      if (student.special?.includes('hearing') && seat.row >= hearingRows) hard++
+      const aisleOk = seat.tags.includes('aisle') || seat.col === 0 || seat.col === cls.layout.cols - 1
+      if (student.special?.includes('mobility') && !aisleOk) hard++
+      if (student.fixedSeatId && student.fixedSeatId !== seatId) hard++
+    }
+    // 成对约束：必须分开（硬约束）；同桌累计次数（超限统计）
+    for (let si = 0; si < idx.seats.length; si++) {
+      const a = occ[si]
+      if (a < 0) continue
+      for (const nb of idx.deskmates[si]) {
+        if (nb <= si) continue
+        const b = occ[nb]
+        if (b < 0) continue
+        const key = pairKey(a, b)
+        deskPairCount.set(key, (deskPairCount.get(key) ?? 0) + 1)
+        if (apartIdx.has(key)) hard++
+      }
+      // 身高序：前面的人比后面的高 = 违背
+      if (cls.constraints.heightRule && cls.layout.mode === 'rows') {
+        const up = idx.vertical[si].up
+        if (up >= 0) {
+          const lower = occ[up] // up 座位更靠讲台（前），此人应更矮
+          if (lower >= 0) {
+            const hUp = cls.students[lower].heightCm
+            const hDown = cls.students[a].heightCm
+            if (typeof hUp === 'number' && typeof hDown === 'number' && hUp > hDown) heightViolations++
+          }
+        }
+      }
+    }
+  }
+
+  const weeks = sorted.length
+  let sum = 0
+  let sum2 = 0
+  for (let i = 0; i < n; i++) {
+    sum += cumScore[i]
+    sum2 += cumScore[i] * cumScore[i]
+  }
+  const variance = n > 0 ? Math.max(0, sum2 - (sum * sum) / n) : 0
+  let range = 0
+  if (n > 0) {
+    let min = Infinity
+    let max = -Infinity
+    for (let i = 0; i < n; i++) {
+      if (frontCount[i] < min) min = frontCount[i]
+      if (frontCount[i] > max) max = frontCount[i]
+    }
+    range = max - min
+  }
+  const nameOf = new Map(cls.students.map((s) => [s.id, s.name]))
+  const deskmateOverLimit: { a: string; b: string; count: number }[] = []
+  for (const [key, count] of deskPairCount) {
+    if (count <= 2) continue
+    const a = Math.floor(key / 4096)
+    const b = key % 4096
+    deskmateOverLimit.push({ a: nameOf.get(cls.students[a]?.id) ?? String(a), b: nameOf.get(cls.students[b]?.id) ?? String(b), count })
+  }
+  deskmateOverLimit.sort((x, y) => y.count - x.count || x.a.localeCompare(x.b))
+
+  return {
+    weeks,
+    hardViolations: hard,
+    frontRowsRange: range,
+    variance,
+    std: Math.sqrt(variance / Math.max(1, n)),
+    deskOverLimit: deskmateOverLimit.length,
+    deskmateOverLimit,
+    heightViolations,
+  }
+}
+
 export function computeFairness(cls: ClassEntity): FairnessReport {
+  // 汇总指标统一由 planMetrics 计算（与多种子比选同一口径）
+  const m = planMetrics(cls, cls.assignments)
   const rows: FairnessRow[] = []
   const deskCount = new Map<string, Map<StudentId, number>>() // studentId → otherId → count
   const cumScore = new Map<StudentId, number>()
@@ -175,51 +299,7 @@ export function computeFairness(cls: ClassEntity): FairnessReport {
     }
   }
 
-  // 身高序违背（行列模式）
-  let heightViolations = 0
-  if (cls.constraints.heightRule && cls.layout.mode === 'rows') {
-    const idx = buildSeatIndex(cls.seats, cls.layout)
-    const heightOf = new Map(cls.students.map((s) => [s.id, s.heightCm]))
-    for (const asg of assignments) {
-      for (const [seatId, studentId] of Object.entries(asg.map)) {
-        const seat = idx.byId.get(seatId)
-        if (!seat) continue
-        const down = idx.byId.get(`r${seat.row + 1}c${seat.col}`)
-        if (!down) continue
-        const downStudent = asg.map[down.id]
-        const hUp = heightOf.get(studentId)
-        const hDown = downStudent ? heightOf.get(downStudent) : undefined
-        if (typeof hUp === 'number' && typeof hDown === 'number' && hUp > hDown) heightViolations++
-      }
-    }
-  }
-
-  const n = cls.students.length || 1
-  let sum = 0
-  let sum2 = 0
-  for (const s of cls.students) {
-    const total = cumScore.get(s.id) ?? 0
-    sum += total
-    sum2 += total * total
-  }
-  const variance = Math.max(0, sum2 - (sum * sum) / n)
-  const std = Math.sqrt(variance / n)
-
-  const frVals = cls.students.map((s) => frontRowsCount.get(s.id) ?? 0)
-  const frontRowsRange = frVals.length ? Math.max(...frVals) - Math.min(...frVals) : 0
-
-  const deskmateOverLimit: { a: string; b: string; count: number }[] = []
-  const nameOf = new Map(cls.students.map((s) => [s.id, s.name]))
-  const seen = new Set<string>()
-  for (const [sid, others] of deskCount) {
-    for (const [oid, count] of others) {
-      const key = [sid, oid].sort().join('|')
-      if (count > 2 && !seen.has(key)) {
-        seen.add(key)
-        deskmateOverLimit.push({ a: nameOf.get(sid) ?? sid, b: nameOf.get(oid) ?? oid, count })
-      }
-    }
-  }
+  // 身高序、Σ偏差²、前排极差、同桌超限对的汇总值统一取自 planMetrics（同一口径）
 
   for (const s of cls.students) {
     const deskmates = [...(deskCount.get(s.id)?.entries() ?? [])]
@@ -236,18 +316,18 @@ export function computeFairness(cls: ClassEntity): FairnessReport {
       totalScore: total,
       avgScore: assignments.length ? total / assignments.length : 0,
       deskmates,
-      maxDeskmateRepeat: deskmates.reduce((m, d) => Math.max(m, d.count), 0),
+      maxDeskmateRepeat: deskmates.reduce((acc, d) => Math.max(acc, d.count), 0),
     })
   }
 
   return {
     rows,
-    totalWeeks: assignments.length,
-    frontRowsRange,
-    variance,
-    std,
-    deskmateOverLimit,
-    heightViolations,
+    totalWeeks: m.weeks,
+    frontRowsRange: m.frontRowsRange,
+    variance: m.variance,
+    std: m.std,
+    deskmateOverLimit: m.deskmateOverLimit,
+    heightViolations: m.heightViolations,
     hardViolations,
   }
 }

@@ -190,6 +190,46 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--brand-weak)
 .stat-card dd { margin: 0; font-weight: 700; display: inline-flex; align-items: center; gap: 4px; }
 .gen-panel { padding-bottom: 10px; }
 
+/* ---------- 多种子比选 ---------- */
+.sweep-panel { display: flex; flex-direction: column; gap: 12px; }
+.sweep-head h3 { display: flex; align-items: center; gap: 6px; color: var(--brand); }
+.sweep-progress { display: flex; flex-direction: column; gap: 6px; }
+.sweep-progress-bar {
+  height: 8px; border-radius: 999px; background: #eef1f6; overflow: hidden;
+}
+.sweep-progress-fill {
+  display: block; height: 100%; background: var(--brand); border-radius: 999px;
+  transition: width 0.2s ease;
+}
+.sweep-progress-text { gap: 8px; }
+.winner-card {
+  border: 1.5px solid #93c5fd; background: #f0f7ff; border-radius: 10px;
+  padding: 12px 14px; display: flex; flex-direction: column; gap: 8px;
+}
+.winner-title { display: flex; align-items: center; gap: 8px; color: #1d4ed8; }
+.winner-points { display: flex; flex-direction: column; gap: 4px; }
+.winner-points li { display: flex; align-items: flex-start; gap: 6px; font-size: 13px; }
+.winner-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.sweep-warn {
+  display: flex; align-items: center; gap: 8px; color: var(--bad);
+  background: var(--bad-weak); border-radius: 8px; padding: 8px 12px; font-size: 13px;
+}
+.sweep-table-wrap { border: 1px solid var(--line); border-radius: 8px; }
+.sweep-table th.num, .sweep-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.sweep-table td { padding: 6px 10px; }
+.sweep-seed { font-variant-numeric: tabular-nums; color: var(--muted); }
+.sweep-row-best { background: #f0f7ff; }
+.sweep-row-best:hover { background: #e6f0fe !important; }
+.sweep-row-best td { font-weight: 600; }
+.sweep-row-hard td { color: var(--warn); }
+.sweep-row-failed td { color: var(--bad); }
+.rank-crown { display: inline-flex; align-items: center; gap: 3px; color: #b8860b; font-weight: 700; }
+.cell-best {
+  color: var(--good); font-weight: 700;
+  box-shadow: inset 0 -2px 0 var(--good);
+}
+.sweep-footnote { margin: 0; }
+
 .swap-preview {
   position: fixed; left: 50%; transform: translateX(-50%); bottom: 18px; z-index: 50;
   display: flex; gap: 14px; align-items: center; flex-wrap: wrap;

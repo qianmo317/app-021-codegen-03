@@ -38,6 +38,8 @@ interface StoreValue {
   /** 更新配置（布局/学生/约束）。若影响已生成结果则清空 assignments（noKeep=true 时直接清） */
   updateSetup(cls: ClassEntity, clearAssignments: boolean): Promise<void>
   regenerate(id: string, mode: RegenMode, opts?: RegenOptions): Promise<RegenResult>
+  /** 采用多种子比选中的某套方案（整体替换当前结果，并记录其种子/周数） */
+  applyPlan(id: string, seed: number, weeks: number, assignments: Assignment[]): Promise<RegenResult>
   swapStudents(id: string, week: number, seatA: string, seatB: string): Promise<RegenResult>
   undoSwap(id: string): Promise<void>
   canUndo(id: string): boolean
@@ -190,6 +192,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [classes, persist],
   )
 
+  const applyPlan = useCallback(
+    async (id: string, seed: number, weeks: number, assignments: Assignment[]): Promise<RegenResult> => {
+      const cls = classes.find((c) => c.id === id)
+      if (!cls) return { ok: false, error: '班级不存在' }
+      const working: ClassEntity = {
+        ...cls,
+        seed,
+        weeks,
+        assignments: assignments.map((a) => ({ ...a, map: { ...a.map }, score: { ...a.score } })),
+      }
+      await persist(working)
+      return { ok: true }
+    },
+    [classes, persist],
+  )
+
   const swapStudents = useCallback(
     async (id: string, week: number, seatA: string, seatB: string): Promise<RegenResult> => {
       const cls = classes.find((c) => c.id === id)
@@ -247,11 +265,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       updateClass,
       updateSetup,
       regenerate,
+      applyPlan,
       swapStudents,
       undoSwap,
       canUndo,
     }),
-    [ready, classes, getClass, createClass, importSample, deleteClass, updateClass, updateSetup, regenerate, swapStudents, undoSwap, canUndo],
+    [ready, classes, getClass, createClass, importSample, deleteClass, updateClass, updateSetup, regenerate, applyPlan, swapStudents, undoSwap, canUndo],
   )
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
